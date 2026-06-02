@@ -4,6 +4,14 @@ Use this guide before starting Module 2 to see which tasks may already be comple
 
 Run the commands manually on the VM named in each section. No SSH wrapper is included here; connect to the VM/router yourself and run the commands locally.
 
+For `HQ-RTR` and `BR-RTR`, use the EcoRouterOS CLI, not Linux commands. After login, enter privileged mode if needed:
+
+```text
+enable
+```
+
+If a command is not accepted exactly, use `?` after the command prefix. EcoRouterOS command names can differ slightly between images, but the checks below show what state you need to inspect.
+
 ## Task 1: Samba AD DC On BR-SRV
 
 Run on `BR-SRV`:
@@ -110,7 +118,7 @@ Already done if:
 - clients are allowed
 - ISP has an upstream NTP source or local stratum fallback
 
-Run on `HQ-SRV`, `HQ-CLI`, `BR-SRV`, `BR-CLI`, `HQ-RTR`, and `BR-RTR`:
+Run on Linux VMs: `HQ-SRV`, `HQ-CLI`, `BR-SRV`, and `BR-CLI`:
 
 ```bash
 systemctl status chronyd --no-pager
@@ -120,6 +128,21 @@ chronyc tracking
 ```
 
 Already done if each client uses the ISP address as its time source and `chronyc sources -v` shows a selected source, usually marked with `^*`.
+
+Run on EcoRouterOS routers: `HQ-RTR` and `BR-RTR`:
+
+```text
+show running-config | include ntp
+show ntp status
+show ntp associations
+show clock
+```
+
+Already done if:
+
+- NTP is configured with the ISP address as the server
+- NTP status shows synchronized, or associations show a selected/reachable peer
+- router time is correct for the exam timezone
 
 ## Task 5: Ansible On BR-SRV
 
@@ -189,35 +212,60 @@ Already done if:
 
 ## Task 8: Static Port Forwarding On HQ-RTR And BR-RTR
 
-Run on `HQ-RTR`:
+Run on EcoRouterOS `HQ-RTR`:
 
-```bash
-iptables -t nat -S PREROUTING
-iptables -S FORWARD
-sysctl net.ipv4.ip_forward
+```text
+show running-config | include nat
+show running-config | include 8080
+show running-config | include 2026
+show running-config | include 192.168.100
+show running-config | include 10.10.100
+show ip nat translations
+show ip nat statistics
+show ip route
+show ip interface brief
 ```
 
 Already done if:
 
-- forwarding is enabled: `net.ipv4.ip_forward = 1`
-- TCP `8080` is forwarded to `HQ-SRV:80`
-- TCP `2026` is forwarded to `HQ-SRV:2026`
-- matching `FORWARD` accept rules exist
+- WAN-facing interface is marked as NAT outside
+- HQ LAN/VLAN interfaces are marked as NAT inside
+- static destination NAT/PAT forwards TCP `8080` to the HQ-SRV web service
+- static destination NAT/PAT forwards TCP `2026` to `HQ-SRV:2026`
+- route table still has working routes toward ISP and internal HQ networks
+- if traffic has already been tested, NAT translations/statistics show hits
 
-Run on `BR-RTR`:
+Run on EcoRouterOS `BR-RTR`:
 
-```bash
-iptables -t nat -S PREROUTING
-iptables -S FORWARD
-sysctl net.ipv4.ip_forward
+```text
+show running-config | include nat
+show running-config | include 8080
+show running-config | include 2026
+show running-config | include 192.168.20
+show running-config | include 10.20.20
+show ip nat translations
+show ip nat statistics
+show ip route
+show ip interface brief
 ```
 
 Already done if:
 
-- forwarding is enabled
-- TCP `8080` is forwarded to `BR-SRV:8080`
-- TCP `2026` is forwarded to `BR-SRV:2026`
-- matching `FORWARD` accept rules exist
+- WAN-facing interface is marked as NAT outside
+- BR LAN interface is marked as NAT inside
+- static destination NAT/PAT forwards TCP `8080` to `BR-SRV:8080`
+- static destination NAT/PAT forwards TCP `2026` to `BR-SRV:2026`
+- route table still has working routes toward ISP and internal BR networks
+- if traffic has already been tested, NAT translations/statistics show hits
+
+Optional live checks after proxy/SSH traffic has been generated from another VM:
+
+```text
+show ip nat translations
+show ip nat statistics
+```
+
+Already done if translation entries or counters increase when clients access the forwarded services.
 
 ## Tasks 9-10: Nginx Reverse Proxy And Web Auth On ISP
 
